@@ -49,10 +49,29 @@ func NewWithPKPath(address, user, pkPath string) *Tunnel {
 	}
 }
 
+// Dial opens a TCP connection to addr through the SSH tunnel. Reconnect-safe:
+// if a previous SSH client is still attached to the Tunnel (e.g. when called
+// again after a transport error), it is closed before being replaced so that
+// the previous client's goroutines and file descriptor are released.
+//
+// Callers must serialise Dial calls themselves — concurrent Dials on the same
+// Tunnel race on t.client and t.agentConn.
 func (t *Tunnel) Dial(ctx context.Context, addr string) (net.Conn, error) {
+	// buildConfig may dial a fresh ssh-agent socket and store it on t.agentConn.
+	// Close any prior agent connection first so we don't leak FDs on reconnect.
+	if t.agentConn != nil {
+		_ = t.agentConn.Close()
+		t.agentConn = nil
+	}
+
 	config, err := t.buildConfig()
 	if err != nil {
 		return nil, err
+	}
+
+	if t.client != nil {
+		_ = t.client.Close()
+		t.client = nil
 	}
 
 	t.client, err = ssh.Dial("tcp", t.address, config)
