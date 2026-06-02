@@ -2,6 +2,11 @@
 
 Use this little helper to create SSH tunnels to remote hosts, e.g. to access a database.
 
+- **Concurrency-safe**: `Dial` may be called from many goroutines (e.g. by a database driver's connection pool); calls are serialised internally.
+- **One shared SSH transport**: a single SSH handshake is reused for all connections (one channel per `Dial`); later `Dial`s never tear down connections opened earlier.
+- **Self-healing**: a dead transport (NAT drop, server restart) is detected and re-established transparently on the next `Dial`.
+- **Keepalives**: SSH-level `keepalive@openssh.com` probes (default every 30s, tune with `WithKeepalive`) keep NAT/firewall state warm and detect dead paths early.
+
 ### Example
 ```golang
 package main
